@@ -302,12 +302,12 @@ async def test_target_basic(bbot_scanner):
     target_dict = scan_events[0].data["target"]
 
     assert target_dict["seeds"] == ["1.2.3.0/24", "bob@fdsa.evilcorp.net", "http://www.evilcorp.net/"]
-    assert target_dict["whitelist"] == ["bob@www.evilcorp.com", "evilcorp.com", "evilcorp.net"]
+    assert target_dict["target"] == ["bob@www.evilcorp.com", "evilcorp.com", "evilcorp.net"]
     assert target_dict["blacklist"] == ["1.2.3.4", "4.3.2.0/24", "bob@asdf.evilcorp.net", "http://1.2.3.4/"]
     assert target_dict["strict_scope"] is False
     assert target_dict["hash"] == "b36955a8238a71842fc5f23b11110c26ea07d451"
     assert target_dict["seed_hash"] == "560af51d1f3d69bc5c156fc270b28497fe52dec1"
-    assert target_dict["whitelist_hash"] == "8ed0a7368e6d34630e1cfd419d2a73767debc4c4"
+    assert target_dict["target_hash"] == "8ed0a7368e6d34630e1cfd419d2a73767debc4c4"
     assert target_dict["blacklist_hash"] == "f7afa1da3422433a13f432c32cc3a99f15156e5c"
     assert target_dict["scope_hash"] == "66e101635e33f5d234428750a0476c713070334a"
 

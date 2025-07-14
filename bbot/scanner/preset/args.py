@@ -105,9 +105,12 @@ class BBOTArgs:
     def preset_from_args(self):
         # the order here is important
         # first we make the preset
+        # Use 'target' if specified, otherwise fall back to 'whitelist' for backwards compatibility
+        target_scope = getattr(self.parsed, 'target', None) or self.parsed.whitelist
+        
         args_preset = self.preset.__class__(
             *self.parsed.targets,
-            whitelist=self.parsed.whitelist,
+            target=target_scope,
             blacklist=self.parsed.blacklist,
             name="args_preset",
         )
@@ -228,12 +231,20 @@ class BBOTArgs:
         target.add_argument(
             "-t", "--targets", nargs="+", default=[], help="Targets to seed the scan", metavar="TARGET"
         )
+        # New --target argument
+        target.add_argument(
+            "--target",
+            nargs="+",
+            default=None,
+            help="What's considered in-scope (by default it's the same as --targets)",
+        )
+        # Keep --whitelist for backwards compatibility but mark as deprecated
         target.add_argument(
             "-w",
             "--whitelist",
             nargs="+",
             default=None,
-            help="What's considered in-scope (by default it's the same as --targets)",
+            help="[DEPRECATED] Use --target instead. What's considered in-scope (by default it's the same as --targets)",
         )
         target.add_argument("-b", "--blacklist", nargs="+", default=[], help="Don't touch these things")
         target.add_argument(
@@ -411,7 +422,15 @@ class BBOTArgs:
         self.parsed.targets = chain_lists(
             self.parsed.targets, try_files=True, msg="Reading targets from file: {filename}"
         )
+        # Handle both --target and --whitelist (for backwards compatibility)
+        if hasattr(self.parsed, 'target') and self.parsed.target is not None:
+            self.parsed.target = chain_lists(
+                self.parsed.target, try_files=True, msg="Reading target from file: {filename}"
+            )
         if self.parsed.whitelist is not None:
+            # Check if both are specified
+            if hasattr(self.parsed, 'target') and self.parsed.target is not None:
+                raise ValidationError("Cannot specify both --target and --whitelist. Please use --target instead.")
             self.parsed.whitelist = chain_lists(
                 self.parsed.whitelist, try_files=True, msg="Reading whitelist from file: {filename}"
             )

@@ -77,7 +77,6 @@ class Preset(metaclass=BasePreset):
 
     Attributes:
         target (Target): Target(s) of scan.
-        whitelist (Target): Scan whitelist (by default this is the same as `target`).
         blacklist (Target): Scan blacklist (this takes ultimate precedence).
         helpers (ConfigAwareHelper): Helper containing various reusable functions, regexes, etc.
         output_dir (pathlib.Path): Output directory for scan.
@@ -118,6 +117,7 @@ class Preset(metaclass=BasePreset):
         *targets,
         whitelist=None,
         blacklist=None,
+        target=None,
         modules=None,
         output_modules=None,
         exclude_modules=None,
@@ -143,7 +143,8 @@ class Preset(metaclass=BasePreset):
 
         Args:
             *targets (str): Target(s) to scan. Types supported: hostnames, IPs, CIDRs, emails, open ports.
-            whitelist (list, optional): Whitelisted target(s) to scan. Defaults to the same as `targets`.
+            target (list, optional): Target scope for scan. Defaults to the same as seed targets.
+            whitelist (list, optional): [DEPRECATED] Whitelisted target(s) to scan. Use 'target' instead.
             blacklist (list, optional): Blacklisted target(s). Takes ultimate precedence. Defaults to empty.
             modules (list[str], optional): List of scan modules to enable for the scan. Defaults to empty list.
             output_modules (list[str], optional): List of output modules to use. Defaults to csv, human, and json.
@@ -263,10 +264,13 @@ class Preset(metaclass=BasePreset):
         # target / whitelist / blacklist
         # these are temporary receptacles until they all get .baked() together
         self._seeds = set(targets if targets else [])
-        self._whitelist = set(whitelist) if whitelist else whitelist
+        # Support both 'target' and 'whitelist' for backwards compatibility
+        if target is not None and whitelist is not None:
+            raise ValueError("Cannot specify both 'target' and 'whitelist' parameters (use 'target')")
+        if target is None:
+            target = whitelist
+        self._target = set(target) if target else target
         self._blacklist = set(blacklist if blacklist else [])
-
-        self._target = None
 
         # we don't fill self.modules yet (that happens in .bake())
         self.explicit_scan_modules.update(set(modules))
@@ -294,9 +298,10 @@ class Preset(metaclass=BasePreset):
 
     @property
     def whitelist(self):
+        # Backwards compatibility - whitelist is now an alias for target
         if self._target is None:
-            raise ValueError("Cannot access whitelist before preset is baked (use ._whitelist instead)")
-        return self.target.whitelist
+            raise ValueError("Cannot access whitelist before preset is baked (use ._target instead)")
+        return self.target.target
 
     @property
     def blacklist(self):
@@ -484,7 +489,7 @@ class Preset(metaclass=BasePreset):
 
         baked_preset._target = BBOTTarget(
             *list(self._seeds),
-            whitelist=self._whitelist,
+            target=self._target,
             blacklist=self._blacklist,
             strict_scope=self.strict_scope,
         )
@@ -655,9 +660,15 @@ class Preset(metaclass=BasePreset):
         Examples:
             >>> preset = Preset.from_dict({"target": ["evilcorp.com"], "modules": ["portscan"]})
         """
+        # Support loading both old 'target' format and new 'seeds'/'target' format
+        seeds = preset_dict.get("seeds", preset_dict.get("target", []))
+        # If 'target' is specified alongside 'seeds', use it as the target scope
+        # Otherwise fall back to 'whitelist' for backwards compatibility
+        target_scope = preset_dict.get("target") if "seeds" in preset_dict else preset_dict.get("whitelist")
+        
         new_preset = cls(
-            *preset_dict.get("target", []),
-            whitelist=preset_dict.get("whitelist"),
+            *seeds,
+            target=target_scope,
             blacklist=preset_dict.get("blacklist"),
             modules=preset_dict.get("modules"),
             output_modules=preset_dict.get("output_modules"),
@@ -786,15 +797,15 @@ class Preset(metaclass=BasePreset):
 
         # scope
         if include_target:
-            target = sorted(self.target.seeds.inputs)
-            whitelist = []
-            if self.target.whitelist is not None:
-                whitelist = sorted(self.target.whitelist.inputs)
+            seeds = sorted(self.target.seeds.inputs)
+            target_scope = []
+            if self.target.target is not None:
+                target_scope = sorted(self.target.target.inputs)
             blacklist = sorted(self.target.blacklist.inputs)
-            if target:
-                preset_dict["target"] = target
-            if whitelist and whitelist != target:
-                preset_dict["whitelist"] = whitelist
+            if seeds:
+                preset_dict["seeds"] = seeds
+            if target_scope and target_scope != seeds:
+                preset_dict["target"] = target_scope
             if blacklist:
                 preset_dict["blacklist"] = blacklist
 

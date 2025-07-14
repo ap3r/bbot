@@ -61,6 +61,8 @@ class DNSResolve(BaseInterceptModule):
         # first, we find or create the main DNS_NAME or IP_ADDRESS associated with this event
         main_host_event, whitelisted, blacklisted, new_event = self.get_dns_parent(event)
         original_tags = set(event.tags)
+        # Check if this event is from a seed
+        is_from_seed = "target" in event.tags
 
         # minimal resolution - first, we resolve A/AAAA records for scope purposes
         if new_event or event is main_host_event:
@@ -77,8 +79,9 @@ class DNSResolve(BaseInterceptModule):
 
         # DNS resolution for hosts that aren't IPs
         if not event_is_ip:
-            # if the event is within our dns search distance, resolve the rest of our records
-            if main_host_event.scope_distance < self._dns_search_distance:
+            # For seeded domains, always resolve DNS records regardless of scope
+            # Otherwise, check if the event is within our dns search distance
+            if is_from_seed or main_host_event.scope_distance < self._dns_search_distance:
                 await self.resolve_event(main_host_event, types=non_minimal_rdtypes)
                 # check for wildcards if the event is within the scan's search distance
                 if new_event and main_host_event.scope_distance <= self.scan.scope_search_distance:
@@ -191,8 +194,11 @@ class DNSResolve(BaseInterceptModule):
                 child_hash = hash(f"{event.host}:{module}:{child_host}")
                 # if we haven't emitted this one before
                 if child_hash not in self.children_emitted:
-                    # and it's either in-scope or inside our dns search distance
-                    if self.preset.in_scope(child_host) or child_event.scope_distance <= self._dns_search_distance:
+                    # Check if the parent event is from a seed (has 'target' tag)
+                    is_from_seed = "target" in event.tags
+                    # For seeded domains, allow DNS discovery regardless of target scope
+                    # Otherwise, check if it's in-scope or inside our dns search distance
+                    if is_from_seed or self.preset.in_scope(child_host) or child_event.scope_distance <= self._dns_search_distance:
                         self.children_emitted.add(child_hash)
                         # if it's a hostname and it's only one hop away, mark it as affiliate
                         if child_event.type == "DNS_NAME" and child_event.scope_distance == 1:
@@ -233,7 +239,7 @@ class DNSResolve(BaseInterceptModule):
                         with suppress(ValidationError):
                             if self.scan.whitelisted(host):
                                 whitelisted = True
-                                event.add_tag(f"dns-whitelisted-{rdtype}")
+                                event.add_tag(f"dns-in-target-{rdtype}")
                 # but a CNAME to a blacklisted host means you're blacklisted
                 if not blacklisted:
                     with suppress(ValidationError):
@@ -291,7 +297,7 @@ class DNSResolve(BaseInterceptModule):
         for parent in event.get_parents(include_self=True):
             if parent.host == event.host and parent.type in ("IP_ADDRESS", "DNS_NAME", "DNS_NAME_UNRESOLVED"):
                 blacklisted = any(t.startswith("dns-blacklisted-") for t in parent.tags)
-                whitelisted = any(t.startswith("dns-whitelisted-") for t in parent.tags)
+                whitelisted = any(t.startswith("dns-in-target-") for t in parent.tags)
                 new_event = parent is event
                 return parent, whitelisted, blacklisted, new_event
         tags = set()

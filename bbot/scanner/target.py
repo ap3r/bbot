@@ -140,12 +140,16 @@ class ACLTarget(BaseTarget):
         super().__init__(*args, **kwargs)
 
 
-class ScanWhitelist(ACLTarget):
+class ScanTarget(ACLTarget):
     """
-    A collection of BBOT events that represent a scan's whitelist.
+    A collection of BBOT events that represent a scan's target scope.
     """
 
     pass
+
+
+# Backwards compatibility
+ScanWhitelist = ScanTarget
 
 
 class ScanBlacklist(ACLTarget):
@@ -210,18 +214,25 @@ class BBOTTarget:
     """
     A convenient abstraction of a scan target that contains three subtargets:
         - seeds
-        - whitelist
+        - target
         - blacklist
 
-    Provides high-level functions like in_scope(), which includes both whitelist and blacklist checks.
+    Provides high-level functions like in_scope(), which includes both target and blacklist checks.
     """
 
-    def __init__(self, *seeds, whitelist=None, blacklist=None, strict_scope=False):
+    def __init__(self, *seeds, whitelist=None, blacklist=None, strict_scope=False, target=None):
         self.strict_scope = strict_scope
         self.seeds = ScanSeeds(*seeds, strict_dns_scope=strict_scope)
-        if whitelist is None:
-            whitelist = self.seeds.hosts
-        self.whitelist = ScanWhitelist(*whitelist, strict_dns_scope=strict_scope)
+        # Support both 'target' and 'whitelist' for backwards compatibility
+        if target is not None and whitelist is not None:
+            raise ValueError("Cannot specify both 'target' and 'whitelist' parameters")
+        if target is None:
+            target = whitelist
+        if target is None:
+            target = self.seeds.hosts
+        self.target = ScanTarget(*target, strict_dns_scope=strict_scope)
+        # Keep whitelist as alias for backwards compatibility
+        self.whitelist = self.target
         if blacklist is None:
             blacklist = []
         self.blacklist = ScanBlacklist(*blacklist)
@@ -230,12 +241,12 @@ class BBOTTarget:
     def json(self):
         return {
             "seeds": sorted(self.seeds.inputs),
-            "whitelist": sorted(self.whitelist.inputs),
+            "target": sorted(self.target.inputs),
             "blacklist": sorted(self.blacklist.inputs),
             "strict_scope": self.strict_scope,
             "hash": self.hash.hex(),
             "seed_hash": self.seeds.hash.hex(),
-            "whitelist_hash": self.whitelist.hash.hex(),
+            "target_hash": self.target.hash.hex(),
             "blacklist_hash": self.blacklist.hash.hex(),
             "scope_hash": self.scope_hash.hex(),
         }
@@ -243,15 +254,15 @@ class BBOTTarget:
     @property
     def hash(self):
         sha1_hash = sha1()
-        for target_hash in [t.hash for t in (self.seeds, self.whitelist, self.blacklist)]:
+        for target_hash in [t.hash for t in (self.seeds, self.target, self.blacklist)]:
             sha1_hash.update(target_hash)
         return sha1_hash.digest()
 
     @property
     def scope_hash(self):
         sha1_hash = sha1()
-        # Consider only the hash values of the whitelist and blacklist
-        for target_hash in [t.hash for t in (self.whitelist, self.blacklist)]:
+        # Consider only the hash values of the target and blacklist
+        for target_hash in [t.hash for t in (self.target, self.blacklist)]:
             sha1_hash.update(target_hash)
         return sha1_hash.digest()
 
@@ -260,7 +271,7 @@ class BBOTTarget:
         Check whether a hostname, url, IP, etc. is in scope.
         Accepts either events or string data.
 
-        Checks whitelist and blacklist.
+        Checks target and blacklist.
         If `host` is an event and its scope distance is zero, it will automatically be considered in-scope.
 
         Examples:
@@ -269,8 +280,8 @@ class BBOTTarget:
             True
         """
         blacklisted = self.blacklisted(host)
-        whitelisted = self.whitelisted(host)
-        return whitelisted and not blacklisted
+        in_target = self.in_target(host)
+        return in_target and not blacklisted
 
     def blacklisted(self, host):
         """
@@ -288,21 +299,27 @@ class BBOTTarget:
         """
         return host in self.blacklist
 
-    def whitelisted(self, host):
+    def in_target(self, host):
         """
-        Check whether a hostname, url, IP, etc. is whitelisted.
+        Check whether a hostname, url, IP, etc. is part of the target scope.
 
         Note that `host` can be a hostname, IP address, CIDR, email address, or any BBOT `Event` with the `host` attribute.
 
         Args:
-            host (str or IPAddress or Event): The host to check against the whitelist
+            host (str or IPAddress or Event): The host to check against the target
 
         Examples:
-            Check if a URL's host is whitelisted:
-            >>> preset.whitelisted("http://www.evilcorp.com")
+            Check if a URL's host is in target:
+            >>> preset.in_target("http://www.evilcorp.com")
             True
         """
-        return host in self.whitelist
+        return host in self.target
+
+    def whitelisted(self, host):
+        """
+        Backwards compatibility wrapper for in_target().
+        """
+        return self.in_target(host)
 
     def __eq__(self, other):
         return self.hash == other.hash

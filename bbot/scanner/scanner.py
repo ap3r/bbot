@@ -64,7 +64,7 @@ class Scanner:
         target (Target): Target of scan (alias to `self.preset.target`).
         preset (Preset): The main scan Preset in its baked form.
         config (omegaconf.dictconfig.DictConfig): BBOT config (alias to `self.preset.config`).
-        whitelist (Target): Scan whitelist (by default this is the same as `target`) (alias to `self.preset.whitelist`).
+        whitelist (Target): [DEPRECATED] Scan whitelist (alias to `self.preset.target`). Use `target` instead.
         blacklist (Target): Scan blacklist (this takes ultimate precedence) (alias to `self.preset.blacklist`).
         helpers (ConfigAwareHelper): Helper containing various reusable functions, regexes, etc. (alias to `self.preset.helpers`).
         output_dir (pathlib.Path): Output directory for scan (alias to `self.preset.output_dir`).
