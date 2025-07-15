@@ -72,6 +72,10 @@ class DNSResolve(BaseInterceptModule):
             if whitelisted and event.scope_distance > 0:
                 self.debug(f"Making {main_host_event} in-scope because it resolves to an in-scope resource (A/AAAA)")
                 main_host_event.scope_distance = 0
+            # Also make seeded domains in-scope regardless of what they resolve to
+            elif is_from_seed and event.scope_distance > 0:
+                self.debug(f"Making {main_host_event} in-scope because it's a seeded domain")
+                main_host_event.scope_distance = 0
 
         # abort if the event resolves to something blacklisted
         if blacklisted:

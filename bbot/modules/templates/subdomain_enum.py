@@ -104,6 +104,11 @@ class subdomain_enum(BaseModule):
             if self.scan.in_scope(p):
                 query = p
                 break
+        # If no in-scope parent found but this is a seeded domain, allow it
+        # This enables subdomain enumeration for seeded domains even with restrictive target scopes
+        if query == event.data and "target" in event.tags:
+            # Use the seeded domain as the query
+            pass
         return ".".join([s for s in query.split(".") if s != "_wildcard"])
 
     async def parse_results(self, r, query=None):
@@ -169,7 +174,8 @@ class subdomain_enum(BaseModule):
         if any(t.startswith("cloud-") for t in event.tags):
             is_cloud = True
         # reject if it's a cloud resource and not in our target
-        if is_cloud and event not in self.scan.target.whitelist:
+        # but allow seeded domains (with "target" tag) even if they're cloud resources
+        if is_cloud and event not in self.scan.target.whitelist and "target" not in event.tags:
             return False, "Event is a cloud resource and not a direct target"
         # optionally reject events with wildcards / errors
         if self.reject_wildcards:

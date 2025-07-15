@@ -370,12 +370,12 @@ class Preset(metaclass=BasePreset):
 
         # target / scope
         self._seeds.update(other._seeds)
-        # leave whitelist as None until we encounter one
-        if other._whitelist is not None:
-            if self._whitelist is None:
-                self._whitelist = set(other._whitelist)
+        # leave target as None until we encounter one
+        if other._target is not None:
+            if self._target is None:
+                self._target = set(other._target)
             else:
-                self._whitelist.update(other._whitelist)
+                self._target.update(other._target)
         self._blacklist.update(other._blacklist)
 
         # module dirs
